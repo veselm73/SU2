@@ -151,12 +151,18 @@ def sweep_and_save_gif(
                 show_visualization=False
             )
 
-            if results and results["HOTA"] > best_HOTA:
-                best_HOTA = results["HOTA"]
-                best_det_params = det_params
-                best_bt_params = bt_params
-                best_tracks_df = tracks_df
-                print(f"  New Best HOTA: {best_HOTA:.4f}")
+            if results:
+                hota_score = results.get('HOTA', 0)
+                deta_score = results.get('DetA', 0)
+                assa_score = results.get('AssA', 0)
+                print(f"  -> HOTA: {hota_score:.4f} | DetA: {deta_score:.4f} | AssA: {assa_score:.4f}")
+
+                if hota_score > best_HOTA:
+                    best_HOTA = hota_score
+                    best_det_params = det_params
+                    best_bt_params = bt_params
+                    best_tracks_df = tracks_df
+                    print(f"  *** New Best HOTA: {best_HOTA:.4f} ***")
 
     print("\nSweep Completed.")
     print(f"Best HOTA: {best_HOTA:.4f}")
