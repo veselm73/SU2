@@ -6,7 +6,7 @@ from tqdm.auto import tqdm
 from .loss import BCEDiceLoss
 from .dataset import CCPDatasetWrapper
 from .model import UNetPlusPlus
-from .config import DEVICE, BATCH_SIZE, TRAIN_SAMPLES, VAL_SAMPLES
+from .config import DEVICE, BATCH_SIZE, TRAIN_SAMPLES, VAL_SAMPLES, MIN_CELLS, MAX_CELLS, PATCH_SIZE, SIM_CONFIG
 from .utils import patch_dataloader
 
 def train_model(model, train_loader, val_loader, epochs=20, lr=1e-3, weight_decay=1e-4, patience=5, device='cuda'):
@@ -71,6 +71,9 @@ def train_model(model, train_loader, val_loader, epochs=20, lr=1e-3, weight_deca
         
         print(f"Epoch {epoch+1}/{epochs}: Train Loss: {train_loss:.4f}, Val Loss: {val_loss:.4f}, Val Dice: {val_dice:.4f}")
         
+        # Save checkpoint
+        torch.save(model.state_dict(), f"checkpoint_epoch_{epoch+1}.pth")
+        
         if val_loss < best_val_loss:
             best_val_loss = val_loss
             print(f"  ✓ New best model (val_loss: {val_loss:.4f})")
@@ -89,6 +92,19 @@ def train_model(model, train_loader, val_loader, epochs=20, lr=1e-3, weight_deca
 def train_unet_pipeline(train_samples=TRAIN_SAMPLES, val_samples=VAL_SAMPLES, epochs=20, batch_size=BATCH_SIZE, learning_rate=1e-3, weight_decay=1e-4, patience=5, device=DEVICE):
     # Patch DataLoader to fix RecursionError
     patch_dataloader()
+    
+    print("Training Configuration:")
+    print(f"  TRAIN_SAMPLES: {train_samples}")
+    print(f"  VAL_SAMPLES: {val_samples}")
+    print(f"  EPOCHS: {epochs}")
+    print(f"  BATCH_SIZE: {batch_size}")
+    print(f"  LEARNING_RATE: {learning_rate}")
+    print(f"  WEIGHT_DECAY: {weight_decay}")
+    print(f"  PATIENCE: {patience}")
+    print(f"  MIN_CELLS: {MIN_CELLS}")
+    print(f"  MAX_CELLS: {MAX_CELLS}")
+    print(f"  PATCH_SIZE: {PATCH_SIZE}")
+    print(f"  SIM_CONFIG: {SIM_CONFIG}")
     
     print("Creating train dataset...")
     train_dataset = CCPDatasetWrapper(length=train_samples)

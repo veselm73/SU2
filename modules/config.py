@@ -54,4 +54,13 @@ if os.path.exists(CONFIG_PATH):
     if "PATIENCE" in config: PATIENCE = config["PATIENCE"]
     if "SEED" in config: SEED = config["SEED"]
     
+    # Data Generator Config
+    if "MIN_CELLS" in config: MIN_CELLS = config["MIN_CELLS"]
+    if "MAX_CELLS" in config: MAX_CELLS = config["MAX_CELLS"]
+    if "PATCH_SIZE" in config: PATCH_SIZE = config["PATCH_SIZE"]
+    if "SIM_CONFIG" in config: 
+        # Update SIM_CONFIG keys individually to preserve defaults for missing keys
+        for k, v in config["SIM_CONFIG"].items():
+            SIM_CONFIG[k] = v
+
     print("Configuration updated.")

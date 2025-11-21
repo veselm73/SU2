@@ -169,6 +169,14 @@ def sweep_and_save_gif(
     print(f"Best Det Params: {best_det_params}")
     print(f"Best BTrack Params: {best_bt_params}")
 
+    # Save Best HOTA to txt
+    hota_output_path = os.path.join(os.path.dirname(gif_output), "best_hota.txt")
+    with open(hota_output_path, "w") as f:
+        f.write(f"Best HOTA: {best_HOTA:.4f}\n")
+        f.write(f"Best Det Params: {best_det_params}\n")
+        f.write(f"Best BTrack Params: {best_bt_params}\n")
+    print(f"Best HOTA score saved to {hota_output_path}")
+
     # 2. Save GIF of best result
     if best_tracks_df is not None and val_input is not None:
         print(f"\nGenerating GIF for best result...")
