@@ -52,7 +52,30 @@ class CCPDatasetWrapper(torch_data.Dataset):
 
     def __getitem__(self, idx):
         img, mask = self._synthetic.data_sample()
+        
+        # Data Augmentation
+        # 1. Random Horizontal Flip
+        if np.random.rand() > 0.5:
+            img = np.fliplr(img)
+            mask = np.fliplr(mask)
+            
+        # 2. Random Vertical Flip
+        if np.random.rand() > 0.5:
+            img = np.flipud(img)
+            mask = np.flipud(mask)
+            
+        # 3. Random 90-degree Rotation
+        k = np.random.randint(0, 4)
+        if k > 0:
+            img = np.rot90(img, k)
+            mask = np.rot90(mask, k)
+            
         img = (img - img.min()) / (img.max() - img.min() + 1e-6)
+        
+        # Ensure correct copy for torch
+        img = img.copy()
+        mask = mask.copy()
+        
         img_tensor = torch.from_numpy(img).unsqueeze(0).float()
         mask_tensor = torch.from_numpy(mask).unsqueeze(0).float()
         return img_tensor, mask_tensor

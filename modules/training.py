@@ -3,14 +3,15 @@ from torch.optim import AdamW
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 from torch.utils.data import DataLoader
 from tqdm.auto import tqdm
-from .loss import IoULoss
+from .loss import BCEDiceLoss
 from .dataset import CCPDatasetWrapper
 from .model import UNetPlusPlus
 from .config import DEVICE, BATCH_SIZE, TRAIN_SAMPLES, VAL_SAMPLES
+from .utils import patch_dataloader
 
 def train_model(model, train_loader, val_loader, epochs=20, lr=1e-3, weight_decay=1e-4, patience=5, device='cuda'):
     model = model.to(device)
-    criterion = IoULoss()
+    criterion = BCEDiceLoss()
     optimizer = AdamW(model.parameters(), lr=lr, weight_decay=weight_decay)
     scheduler = ReduceLROnPlateau(optimizer, mode='min', factor=0.5, patience=3)
     
@@ -86,6 +87,9 @@ def train_model(model, train_loader, val_loader, epochs=20, lr=1e-3, weight_deca
     return model, history
 
 def train_unet_pipeline(train_samples=TRAIN_SAMPLES, val_samples=VAL_SAMPLES, epochs=20, batch_size=BATCH_SIZE, learning_rate=1e-3, weight_decay=1e-4, patience=5, device=DEVICE):
+    # Patch DataLoader to fix RecursionError
+    patch_dataloader()
+    
     print("Creating train dataset...")
     train_dataset = CCPDatasetWrapper(length=train_samples)
     print("Creating validation dataset...")

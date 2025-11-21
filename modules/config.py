@@ -1,4 +1,6 @@
 import torch
+import os
+import yaml
 
 # Device configuration
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -33,3 +35,23 @@ PATIENCE = 5
 VAL_DATA_PATH = "/content/val_data"
 VAL_TIF_PATH = f"{VAL_DATA_PATH}/val.tif"
 VAL_CSV_PATH = f"{VAL_DATA_PATH}/val.csv"
+
+# Load config from YAML if exists
+CONFIG_PATH = "config.yaml"
+if os.path.exists(CONFIG_PATH):
+    print(f"Loading configuration from {CONFIG_PATH}...")
+    with open(CONFIG_PATH, "r") as f:
+        config = yaml.safe_load(f)
+        
+    # Update globals with values from YAML
+    if "TRAIN_SAMPLES" in config: TRAIN_SAMPLES = config["TRAIN_SAMPLES"]
+    if "VAL_SAMPLES" in config: VAL_SAMPLES = config["VAL_SAMPLES"]
+    if "BATCH_SIZE" in config: BATCH_SIZE = config["BATCH_SIZE"]
+    if "LEARNING_RATE" in config: LEARNING_RATE = float(config["LEARNING_RATE"])
+    if "WEIGHT_DECAY" in config: WEIGHT_DECAY = float(config["WEIGHT_DECAY"])
+    if "DROPOUT_RATE" in config: DROPOUT_RATE = float(config["DROPOUT_RATE"])
+    if "EPOCHS" in config: EPOCHS = config["EPOCHS"]
+    if "PATIENCE" in config: PATIENCE = config["PATIENCE"]
+    if "SEED" in config: SEED = config["SEED"]
+    
+    print("Configuration updated.")

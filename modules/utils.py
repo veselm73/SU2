@@ -1,88 +1,116 @@
-import os
-import random
-import numpy as np
 import torch
-import requests
-import zipfile
-from PIL import Image
+import numpy as np
+import random
 import matplotlib.pyplot as plt
-from matplotlib.patches import Rectangle
-from matplotlib.animation import FuncAnimation
-from IPython.display import HTML, display
-import pandas as pd
-import matplotlib.collections as mc
+import zipfile
+import os
+import sys
 
 def set_seed(seed=42):
-    """Set random seeds for reproducibility."""
-    random.seed(seed)
-    np.random.seed(seed)
+    """Sets the seed for reproducibility."""
     torch.manual_seed(seed)
     torch.cuda.manual_seed_all(seed)
+    np.random.seed(seed)
+    random.seed(seed)
     torch.backends.cudnn.deterministic = True
     torch.backends.cudnn.benchmark = False
-    print(f"Random seeds set to {seed}")
-
-def download_and_unzip(url, extract_to, chain_path=None):
-    """Download and unzip using a verified SSL certificate if provided."""
-    if os.path.exists(extract_to):
-        print(f"The directory '{extract_to}' already exists. Skipping download.")
-        return
-
-    local_zip = os.path.basename(url)
-    print(f"Downloading {local_zip}...")
-    try:
-        kwargs = {'stream': True, 'timeout': 20}
-        if chain_path:
-            kwargs['verify'] = chain_path
-            
-        response = requests.get(url, **kwargs)
-        response.raise_for_status()
-        with open(local_zip, "wb") as f:
-            for chunk in response.iter_content(chunk_size=8192):
-                f.write(chunk)
-        
-        print(f"Extracting to '{extract_to}'...")
-        os.makedirs(extract_to, exist_ok=True)
-        with zipfile.ZipFile(local_zip, "r") as zip_ref:
-            zip_ref.extractall(extract_to)
-        os.remove(local_zip)
-        print(f"Extraction completed.")
-
-    except Exception as e:
-        print(f"Download/Extraction error: {e}")
-
-def open_tiff_file(name: str) -> np.ndarray:
-    """Load multi-frame TIFF file."""
-    if not os.path.exists(name):
-        print(f"File not found: {name}")
-        return None
-    img = Image.open(name)
-    frames = []
-    for i in range(img.n_frames):
-        img.seek(i)
-        frames.append(np.array(img))
-    return np.array(frames).squeeze()
 
 def plot_training_history(history):
-    """Plot training history."""
-    fig, axes = plt.subplots(1, 2, figsize=(14, 5))
-
+    """Plots training and validation loss and dice score."""
+    epochs = range(1, len(history['train_loss']) + 1)
+    
+    plt.figure(figsize=(12, 5))
+    
     # Loss
-    axes[0].plot(history['train_loss'], label='Train Loss', marker='o')
-    axes[0].plot(history['val_loss'], label='Val Loss', marker='s')
-    axes[0].set_xlabel('Epoch')
-    axes[0].set_ylabel('Loss')
-    axes[0].set_title('Training and Validation Loss')
-    axes[0].legend()
-    axes[0].grid(True, alpha=0.3)
-
-    # Dice score
-    axes[1].plot(history['val_dice'], label='Val Dice', marker='o', color='green')
-    axes[1].set_xlabel('Epoch')
-    axes[1].set_ylabel('Dice Score')
-    axes[1].set_title('Validation Dice Score')
-    axes[1].legend()
-    axes[1].grid(True, alpha=0.3)
-
+    plt.subplot(1, 2, 1)
+    plt.plot(epochs, history['train_loss'], 'b-', label='Train Loss')
+    plt.plot(epochs, history['val_loss'], 'r-', label='Val Loss')
+    plt.title('Training and Validation Loss')
+    plt.xlabel('Epochs')
+    plt.ylabel('Loss')
+    plt.legend()
+    
+    # Dice
+    plt.subplot(1, 2, 2)
+    plt.plot(epochs, history['val_dice'], 'g-', label='Val Dice')
+    plt.title('Validation Dice Score')
+    plt.xlabel('Epochs')
+    plt.ylabel('Dice Score')
+    plt.legend()
+    
     plt.tight_layout()
     plt.show()
+
+def download_and_unzip(url, extract_to, chain_path=None):
+    """Downloads a zip file and extracts it."""
+    import requests
+    
+    if not os.path.exists(extract_to):
+        os.makedirs(extract_to)
+        
+    zip_path = os.path.join(extract_to, "temp.zip")
+    
+    print(f"Downloading {url}...")
+    # Use the certificate chain if provided
+    verify = chain_path if chain_path else True
+    
+    try:
+        r = requests.get(url, stream=True, verify=verify)
+        r.raise_for_status()
+        with open(zip_path, 'wb') as f:
+            for chunk in r.iter_content(chunk_size=8192):
+                f.write(chunk)
+                
+        print("Extracting...")
+        with zipfile.ZipFile(zip_path, 'r') as zip_ref:
+            zip_ref.extractall(extract_to)
+            
+        os.remove(zip_path)
+        print("Done!")
+    except requests.exceptions.SSLError as e:
+        print(f"SSL Error: {e}")
+        print("Try providing the correct certificate chain path.")
+    except Exception as e:
+        print(f"Error: {e}")
+
+def patch_dataloader():
+    """
+    Patches torch.utils.data.DataLoader to fix RecursionError by forcing persistent_workers=True.
+    This is a workaround for a specific issue in some environments.
+    """
+    print("Attempting to fix RecursionError by retrieving clean DataLoader...")
+
+    # 1. Identify the DataLoader class currently in memory
+    TargetDataLoader = torch.utils.data.DataLoader
+
+    # 2. Obtain a CLEAN, unpatched __init__ method by forcing a fresh import
+    # We temporarily remove the submodule from sys.modules to bypass the cache
+    if 'torch.utils.data.dataloader' in sys.modules:
+        del sys.modules['torch.utils.data.dataloader']
+
+    try:
+        # Import a fresh copy of the module
+        from torch.utils.data.dataloader import DataLoader as CleanDataLoader
+        clean_init = CleanDataLoader.__init__
+        print("Success: Retrieved a clean, unpatched __init__ method.")
+    except ImportError:
+        # Fallback if the internal structure is different
+        print("Warning: Could not force reload. Trying to unwrap if possible.")
+        clean_init = TargetDataLoader.__init__
+        while hasattr(clean_init, '__wrapped__'):
+            clean_init = clean_init.__wrapped__
+
+    # 3. Define the patch using the CLEAN init
+    def patched_dataloader_init(self, *args, **kwargs):
+        # Apply the fix: force persistent_workers=True if num_workers > 0
+        if kwargs.get('num_workers', 0) > 0 and 'persistent_workers' not in kwargs:
+            kwargs['persistent_workers'] = True
+            print(f"[INFO] Patched DataLoader for {self}: persistent_workers=True")
+        
+        # Call the clean original init
+        clean_init(self, *args, **kwargs)
+
+    # 4. Apply the patch to the existing DataLoader class object
+    TargetDataLoader.__init__ = patched_dataloader_init
+
+    print("Fixed: torch.utils.data.DataLoader has been successfully patched.")
