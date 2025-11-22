@@ -28,7 +28,10 @@ from torch.optim.lr_scheduler import ReduceLROnPlateau
 import cv2
 import matplotlib.pyplot as plt
 from tqdm.auto import tqdm
+from tqdm.auto import tqdm
 import btrack
+from modules.config import PATCH_SIZE, SIM_CONFIG, MIN_CELLS, MAX_CELLS
+from modules.dataset import visualize_generated_data
 
 # Configuration
 warnings.filterwarnings("ignore")
@@ -489,9 +492,19 @@ def train_model(model, train_loader, val_loader, epochs=20, lr=1e-3, device='cud
 
 def train_unet_pipeline(train_samples=500, val_samples=100, epochs=20, batch_size=8, learning_rate=1e-3):
     print("Creating train dataset...")
-    train_dataset = CCPDatasetWrapper(length=train_samples)
+    train_dataset = CCPDatasetWrapper(length=train_samples, min_n=MIN_CELLS, max_n=MAX_CELLS, patch_size=PATCH_SIZE, sim_config=SIM_CONFIG)
     print("Creating validation dataset...")
-    val_dataset = CCPDatasetWrapper(length=val_samples)
+    val_dataset = CCPDatasetWrapper(length=val_samples, min_n=MIN_CELLS, max_n=MAX_CELLS, patch_size=PATCH_SIZE, sim_config=SIM_CONFIG)
+    
+    # Visualize data before training (sanity check)
+    print("Visualizing generated data samples...")
+    try:
+        visualize_generated_data(train_dataset, num_samples=4)
+    except Exception as e:
+        print(f"Could not visualize data: {e}")
+        # If running in a script without display, this might fail or just not show anything.
+        # We can save the figure if needed, but the function uses plt.show().
+        # In Colab, this will show the plot.
     
     train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, num_workers=2)
     val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False, num_workers=2)

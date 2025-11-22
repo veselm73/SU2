@@ -2,12 +2,14 @@ import numpy as np
 import torch
 import torch.utils.data as torch_data
 from .simulation import SyntheticDataset
-from .config import MIN_CELLS, MAX_CELLS
+from .simulation import SyntheticDataset
+from .config import MIN_CELLS, MAX_CELLS, PATCH_SIZE, SIM_CONFIG, RADIUS
+import matplotlib.pyplot as plt
 
 class SyntheticCCPDataset(SyntheticDataset):
     """Synthetic CCP dataset with ground truth masks."""
-    def __init__(self, min_n=MIN_CELLS, max_n=MAX_CELLS, radius=2.5, contrast_fg_range=(0.0, 1.0), contrast_bg_range=(0.0, 1.0)):
-        super().__init__(contrast_fg_range, contrast_bg_range)
+    def __init__(self, min_n=MIN_CELLS, max_n=MAX_CELLS, radius=RADIUS, contrast_fg_range=(0.0, 1.0), contrast_bg_range=(0.0, 1.0), patch_size=PATCH_SIZE, sim_config=SIM_CONFIG):
+        super().__init__(contrast_fg_range, contrast_bg_range, patch_size=patch_size, sim_config=sim_config)
         self.min_n, self.max_n = min_n, max_n
         self.radius = radius
         self.thickness = 1.0
@@ -42,10 +44,10 @@ class CCPDatasetWrapper(torch_data.Dataset):
     """
     PyTorch Dataset that yields synthetic CCP images and masks on-the-fly.
     """
-    def __init__(self, length=500, min_n=MIN_CELLS, max_n=MAX_CELLS):
+    def __init__(self, length=500, min_n=MIN_CELLS, max_n=MAX_CELLS, patch_size=PATCH_SIZE, sim_config=SIM_CONFIG):
         super().__init__()
         self.length = length
-        self._synthetic = SyntheticCCPDataset(min_n=min_n, max_n=max_n)
+        self._synthetic = SyntheticCCPDataset(min_n=min_n, max_n=max_n, patch_size=patch_size, sim_config=sim_config)
 
     def __len__(self):
         return self.length
@@ -79,3 +81,36 @@ class CCPDatasetWrapper(torch_data.Dataset):
         img_tensor = torch.from_numpy(img).unsqueeze(0).float()
         mask_tensor = torch.from_numpy(mask).unsqueeze(0).float()
         return img_tensor, mask_tensor
+
+def visualize_generated_data(dataset, num_samples=4, save_path=None):
+    """
+    Generates and plots a few samples from the dataset.
+    """
+    fig, axes = plt.subplots(num_samples, 2, figsize=(8, 4 * num_samples))
+    if num_samples == 1:
+        axes = np.expand_dims(axes, 0)
+        
+    for i in range(num_samples):
+        img, mask = dataset[i]
+        
+        # Convert tensor to numpy if needed
+        if isinstance(img, torch.Tensor):
+            img = img.squeeze().numpy()
+        if isinstance(mask, torch.Tensor):
+            mask = mask.squeeze().numpy()
+            
+        axes[i, 0].imshow(img, cmap='gray')
+        axes[i, 0].set_title(f"Sample {i+1} - Image")
+        axes[i, 0].axis('off')
+        
+        axes[i, 1].imshow(mask, cmap='gray')
+        axes[i, 1].set_title(f"Sample {i+1} - Mask")
+        axes[i, 1].axis('off')
+        
+    plt.tight_layout()
+    if save_path:
+        plt.savefig(save_path)
+        print(f"Visualization saved to {save_path}")
+    else:
+        plt.show()
+    plt.close(fig)

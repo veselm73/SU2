@@ -130,16 +130,19 @@ def run_reconstruction(fft_images: np.ndarray, otf: OTF, shifts, phase_offsets, 
 
 class SyntheticDataset:
     """Base synthetic dataset for SIM images."""
-    def __init__(self, contrast_fg_range=(0.0, 1.0), contrast_bg_range=(0.0, 1.0)):
-        self.patch_size = 128
+    def __init__(self, contrast_fg_range=(0.0, 1.0), contrast_bg_range=(0.0, 1.0), patch_size=128, sim_config=None):
+        self.patch_size = patch_size
         self.contrast_fg_range = contrast_fg_range
         self.contrast_bg_range = contrast_bg_range
         self.frequency = 0.17
         self.amplitude = 1.0
-        self.config = {
-            "na": 1.49, "wavelength": 512, "px_size": 0.07,
-            "wiener_parameter": 0.1, "apo_cutoff": 2.0, "apo_bend": 0.9
-        }
+        if sim_config is None:
+            self.config = {
+                "na": 1.49, "wavelength": 512, "px_size": 0.07,
+                "wiener_parameter": 0.1, "apo_cutoff": 2.0, "apo_bend": 0.9
+            }
+        else:
+            self.config = sim_config
         self.otf = OTF(self.config['na'], self.config['wavelength'], self.config['px_size'], self.patch_size // 2, 0.3)
         self.otf_mult = self.otf(self.patch_size)
         self.perlin = PerlinNoise(self.patch_size, 1)

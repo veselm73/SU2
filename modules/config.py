@@ -18,8 +18,9 @@ SIM_CONFIG = {
     "apo_cutoff": 2.0,
     "apo_bend": 0.9
 }
-MIN_CELLS = 5
-MAX_CELLS = 15
+MIN_CELLS = 8
+MAX_CELLS = 24
+RADIUS = 4.0
 
 # Training Config
 TRAIN_SAMPLES = 500
@@ -57,6 +58,7 @@ if os.path.exists(CONFIG_PATH):
     # Data Generator Config
     if "MIN_CELLS" in config: MIN_CELLS = config["MIN_CELLS"]
     if "MAX_CELLS" in config: MAX_CELLS = config["MAX_CELLS"]
+    if "RADIUS" in config: RADIUS = config["RADIUS"]
     if "PATCH_SIZE" in config: PATCH_SIZE = config["PATCH_SIZE"]
     if "SIM_CONFIG" in config: 
         # Update SIM_CONFIG keys individually to preserve defaults for missing keys

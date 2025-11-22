@@ -4,7 +4,7 @@ from torch.optim.lr_scheduler import ReduceLROnPlateau
 from torch.utils.data import DataLoader
 from tqdm.auto import tqdm
 from .loss import BCEDiceLoss
-from .dataset import CCPDatasetWrapper
+from .dataset import CCPDatasetWrapper, visualize_generated_data
 from .model import UNetPlusPlus
 from .config import DEVICE, BATCH_SIZE, TRAIN_SAMPLES, VAL_SAMPLES, MIN_CELLS, MAX_CELLS, PATCH_SIZE, SIM_CONFIG
 from .utils import patch_dataloader
@@ -107,9 +107,16 @@ def train_unet_pipeline(train_samples=TRAIN_SAMPLES, val_samples=VAL_SAMPLES, ep
     print(f"  SIM_CONFIG: {SIM_CONFIG}")
     
     print("Creating train dataset...")
-    train_dataset = CCPDatasetWrapper(length=train_samples)
+    train_dataset = CCPDatasetWrapper(length=train_samples, min_n=MIN_CELLS, max_n=MAX_CELLS, patch_size=PATCH_SIZE, sim_config=SIM_CONFIG)
     print("Creating validation dataset...")
-    val_dataset = CCPDatasetWrapper(length=val_samples)
+    val_dataset = CCPDatasetWrapper(length=val_samples, min_n=MIN_CELLS, max_n=MAX_CELLS, patch_size=PATCH_SIZE, sim_config=SIM_CONFIG)
+    
+    # Visualize data before training (sanity check)
+    print("Visualizing generated data samples...")
+    try:
+        visualize_generated_data(train_dataset, num_samples=4)
+    except Exception as e:
+        print(f"Could not visualize data: {e}")
     
     train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, num_workers=2)
     val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False, num_workers=2)
