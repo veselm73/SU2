@@ -157,8 +157,8 @@ class SyntheticDataset:
                                                       self.amplitude, self.patch_size) for i in range(9)])
         fg_c = np.random.uniform(*self.contrast_fg_range)
         bg_c = np.random.uniform(*self.contrast_bg_range)
-        foreground = 250 + fg_c * 500
-        background = 50 + bg_c * 50
+        foreground = 400 + fg_c * 800  # Increased from 250 + 500
+        background = 100 + bg_c * 150  # Increased from 50 + 50
         high_res_image = (image * foreground + background) * self.perlin()
         ix = np.fft.fft2(illumination * high_res_image)
         hix = self.otf_mult * ix
@@ -170,4 +170,5 @@ class SyntheticDataset:
         noisy_amplitudes = np.random.normal(self.amplitude, 0.1, 3)
         reconstruction = run_reconstruction(np.fft.fft2(low_res_images), self.otf, noisy_shifts,
                                           noisy_phase_offsets, noisy_amplitudes, self.config)[1]
-        return (reconstruction - np.mean(reconstruction)) / np.std(reconstruction)
+        # Use min-max normalization instead of standardization to preserve brightness
+        return (reconstruction - reconstruction.min()) / (reconstruction.max() - reconstruction.min() + 1e-6)

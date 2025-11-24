@@ -6,9 +6,10 @@ class BCEDiceLoss(nn.Module):
     """
     Combination of BCEWithLogitsLoss and Dice Loss.
     """
-    def __init__(self, bce_weight=0.5, smooth=1e-6):
+    def __init__(self, bce_weight=1.0, dice_weight=1.0, smooth=1e-6):
         super(BCEDiceLoss, self).__init__()
         self.bce_weight = bce_weight
+        self.dice_weight = dice_weight
         self.smooth = smooth
         self.bce = nn.BCEWithLogitsLoss()
 
@@ -26,4 +27,4 @@ class BCEDiceLoss(nn.Module):
         dice_loss = 1 - dice
         
         # Combined Loss
-        return self.bce_weight * bce_loss + (1 - self.bce_weight) * dice_loss
+        return self.bce_weight * bce_loss + self.dice_weight * dice_loss

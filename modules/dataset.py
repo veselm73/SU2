@@ -8,7 +8,9 @@ import matplotlib.pyplot as plt
 
 class SyntheticCCPDataset(SyntheticDataset):
     """Synthetic CCP dataset with ground truth masks."""
-    def __init__(self, min_n=MIN_CELLS, max_n=MAX_CELLS, radius=RADIUS, contrast_fg_range=(0.0, 1.0), contrast_bg_range=(0.0, 1.0), patch_size=PATCH_SIZE, sim_config=SIM_CONFIG):
+    def __init__(self, min_n=MIN_CELLS, max_n=MAX_CELLS, radius=RADIUS, 
+                 contrast_fg_range=(0.4, 1.2), contrast_bg_range=(0.2, 0.5), 
+                 patch_size=PATCH_SIZE, sim_config=SIM_CONFIG):
         super().__init__(contrast_fg_range, contrast_bg_range, patch_size=patch_size, sim_config=sim_config)
         self.min_n, self.max_n = min_n, max_n
         self.radius = radius
@@ -24,20 +26,38 @@ class SyntheticCCPDataset(SyntheticDataset):
         while True:
             yield self.data_sample()
 
+
     def data_sample(self):
         n = np.random.randint(self.min_n, self.max_n)
         indices = np.random.choice(len(self.yy), size=n, replace=False)
         offsets = np.random.uniform(-self.max_offset, self.max_offset, (n, 2))
         positions = np.column_stack([self.yy[indices], self.xx[indices]]) + offsets
         classes = np.random.beta(self.beta_a, self.beta_b, n) * 0.9 + 0.1
-        target_distance = classes * self.radius
+        
+        # Calculate distance from each cell center
         distance = np.hypot(self.yyy[..., None] - positions[:, 0], self.xxx[..., None] - positions[:, 1])
-        abs_distance = np.abs(distance - target_distance)
-        parts = np.where(abs_distance > self.thickness, 0, np.log(np.interp(abs_distance / self.thickness, [0, 1], [np.e, 1])))
+        
+        # Create filled cells using Gaussian-like decay instead of rings
+        # Each cell has intensity that decreases from center
+        cell_radius = classes * self.radius
+        
+        # Gaussian-like falloff: intensity = exp(-(distance/radius)^2)
+        # Adding some variation with the thickness parameter for edge sharpness
+        sigma = cell_radius / 2.0  # Controls how quickly intensity falls off
+        parts = np.exp(-0.5 * (distance / (sigma + 1e-6))**2)
+        
+        # Apply threshold to create defined edges (optional, adjust for softer/harder edges)
+        parts = np.where(distance < cell_radius * 1.5, parts, 0)
+        
+        # Combine all cells
         full_image = np.sum(parts, -1)
-        distances = np.maximum(classes - distance / ((1 - classes) * 2 + self.radius + self.thickness * 2), 0)
+        
+        # Create mask for training (filled circles)
+        distances = np.maximum(1.0 - distance / (cell_radius + 1e-6), 0)
         y = np.minimum(np.sum(distances, -1), 1)
+        
         x = super()._simulate_sim(full_image)
+
         return x, y
 
 class CCPDatasetWrapper(torch_data.Dataset):
