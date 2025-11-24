@@ -66,3 +66,16 @@ if os.path.exists(CONFIG_PATH):
             SIM_CONFIG[k] = v
 
     print("Configuration updated.")
+
+# SAM 3 Defaults
+DETECTION_MODEL = "unet"
+SAM3_CHECKPOINT = "checkpoints/sam3_hiera_large.pt"
+SAM3_MODEL_TYPE = "vit_l"
+
+if os.path.exists(CONFIG_PATH):
+    # Re-read to get SAM 3 params if they exist (simplistic approach, or just check config dict again)
+    # Since we already loaded config dict above, we can just check it.
+    if "DETECTION_MODEL" in config: DETECTION_MODEL = config["DETECTION_MODEL"]
+    if "SAM3_CHECKPOINT" in config: SAM3_CHECKPOINT = config["SAM3_CHECKPOINT"]
+    if "SAM3_MODEL_TYPE" in config: SAM3_MODEL_TYPE = config["SAM3_MODEL_TYPE"]
+

@@ -6,7 +6,7 @@ from tqdm.auto import tqdm
 from .loss import BCEDiceLoss
 from .dataset import CCPDatasetWrapper, visualize_generated_data
 from .model import UNetPlusPlus
-from .config import DEVICE, BATCH_SIZE, TRAIN_SAMPLES, VAL_SAMPLES, MIN_CELLS, MAX_CELLS, PATCH_SIZE, SIM_CONFIG
+from .config import DEVICE, BATCH_SIZE, TRAIN_SAMPLES, VAL_SAMPLES, MIN_CELLS, MAX_CELLS, PATCH_SIZE, SIM_CONFIG, DETECTION_MODEL, SAM3_CHECKPOINT, SAM3_MODEL_TYPE
 from .utils import patch_dataloader
 
 def train_model(model, train_loader, val_loader, epochs=20, lr=1e-3, weight_decay=1e-4, patience=5, device='cuda'):

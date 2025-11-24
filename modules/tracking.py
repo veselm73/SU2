@@ -340,8 +340,23 @@ def run_tracking_on_validation(
 
     val_roi = val_input[:, y_min:y_max, x_min:x_max]
     
-    # Initialize detector with params
-    detector = CCPDetector(model, device=DEVICE, params=detection_params)
+    # Initialize detector
+    if detection_params is None:
+        detection_params = DetectionParams()
+
+    if tracking_method == "sam3" or (hasattr(detection_params, 'model_type') and detection_params.model_type == 'sam3'):
+        # Use SAM 3
+        from .sam_detector import SAM3Detector
+        # We need to instantiate SAM3Detector. 
+        # Note: model argument passed to this function is UNet. We ignore it for SAM 3 or use it if it was passed as None.
+        # But run_tracking_on_validation signature expects 'model'. 
+        # We can handle this by checking a global config or a new argument.
+        # For now, let's assume we use the global config DETECTION_MODEL if not specified.
+        detector = SAM3Detector()
+        print("Using SAM 3 Detector")
+    else:
+        # Use UNet++
+        detector = CCPDetector(model, device=DEVICE, params=detection_params)
     
     # print("Detecting CCPs...")
     detections_per_frame = []
@@ -353,7 +368,15 @@ def run_tracking_on_validation(
     for frame_idx in iterator:
         frame = val_roi[frame_idx]
         frame_norm = (frame - frame.mean()) / (frame.std() + 1e-8)
-        mask, detections = detector.detect(frame_norm)
+        
+        if isinstance(detector, CCPDetector):
+            mask, detections = detector.detect(frame_norm)
+        else:
+            # SAM 3
+            # We need to pass a text prompt. "cell" or "particle" or "bright spot"
+            # Let's try "cell" for now.
+            mask, detections = detector.detect(frame_norm, text_prompt="cell")
+            
         detections_per_frame.append(detections)
 
     # print(f"Linking with {tracking_method}...")
