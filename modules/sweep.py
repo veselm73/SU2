@@ -9,6 +9,7 @@ import itertools
 import time
 import os
 from datetime import timedelta
+from pathlib import Path
 from modules.tracking import DetectionParams, BTrackParams, run_tracking_on_validation
 from modules.utils import open_tiff_file
 
@@ -97,10 +98,17 @@ def sweep_and_save_gif(
     btrack_param_grid,
     y_min=512, y_max=768,
     x_min=256, x_max=512,
-    gif_output="best_tracking.gif"
+    gif_output="best_tracking.gif",
+    val_tif_path=None,
 ):
     """
     Sweep parameters, find best HOTA, and save the best result as a GIF.
+
+    Parameters
+    ----------
+    val_tif_path:
+        Optional override for the validation TIFF path. Falls back to the
+        SU2_VAL_TIF environment variable or <repo>/val_data/val.tif.
     """
     det_items = list(det_param_grid.items())
     bt_items  = list(btrack_param_grid.items())
@@ -119,12 +127,17 @@ def sweep_and_save_gif(
     best_bt_params = None
     best_tracks_df = None
     
-    # Load validation data (assuming path from notebook)
-    val_path = "/content/val_data/val.tif"
-    if os.path.exists(val_path):
-        val_input = open_tiff_file(val_path).astype(np.float64)
+    # Load validation data
+    if val_tif_path is None:
+        val_tif_path = os.environ.get(
+            "SU2_VAL_TIF",
+            os.path.join(os.getcwd(), "val_data", "val.tif"),
+        )
+    val_path = Path(val_tif_path)
+    if val_path.exists():
+        val_input = open_tiff_file(str(val_path)).astype(np.float64)
     else:
-        print("Warning: Validation TIFF not found. GIF generation might fail.")
+        print(f"Warning: Validation TIFF not found at {val_path}. GIF generation might fail.")
         val_input = None
 
     run_idx = 0
