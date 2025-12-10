@@ -1,169 +1,123 @@
-# SU2 - Cell Segmentation and Tracking Pipeline
+# SU2 - Cell Detection and Tracking with StarDist
 
-A deep learning pipeline for cell segmentation and tracking in microscopy images using U-Net++ and StarDist models with SIM (Structured Illumination Microscopy) reconstruction.
+Deep learning pipeline for cell detection and tracking in microscopy images. Uses **StarDist** with a ResNet encoder for robust cell detection and **BTrack/LapTrack** for temporal tracking.
+
+## Quick Start (Google Colab)
+
+The recommended way to run this pipeline is on Google Colab with GPU:
+
+1. Open [`notebooks/SU2_StarDist_final.ipynb`](notebooks/SU2_StarDist_final.ipynb) in Colab
+2. Run all cells - data is automatically downloaded
+3. Results are saved to `models/stardist/`
+
+[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/veselm73/SU2/blob/main/notebooks/SU2_StarDist_final.ipynb)
 
 ## Features
 
-- **U-Net++ Segmentation**: Deep learning model for cell segmentation
-- **StarDist Integration**: Star-convex polygon detection for cell nuclei
-- **Cell Tracking**: BTrack and LapTrack integration for temporal cell tracking
-- **Synthetic Data Generation**: SIM-based synthetic training data generation
-- **SAM3 Annotation**: Segment Anything Model integration for semi-automatic annotation
-- **K-Fold Cross-Validation**: Multiple notebook variants for robust model evaluation
-- **Google Colab Support**: Ready-to-use notebooks for cloud training
+- **StarDist Detection**: Star-convex polygon detection with configurable backbone (ResNet18/34/50)
+- **Improved Training Pipeline**:
+  - Combined loss function (Focal + Dice + Smooth L1)
+  - Data augmentation (rotation, flips, noise, elastic deformation)
+  - Weight decay regularization + LR scheduling
+  - Early stopping to prevent overfitting
+  - Automatic threshold optimization (prob_thresh, nms_thresh)
+- **K-Fold Cross-Validation**: 5-fold CV with per-fold evaluation
+- **Cell Tracking**: BTrack and LapTrack with HOTA metric evaluation
+- **Included Training Data**: 42 annotated frames with masks from SAM
 
 ## Project Structure
 
 ```
 SU2/
-├── README.md                 # This file
-├── requirements.txt          # Python dependencies
-├── .gitignore
+├── notebooks/
+│   ├── SU2_StarDist_final.ipynb  # Main notebook (best results)
+│   ├── Train_on_Colab.ipynb      # Alternative U-Net training
+│   └── kfold/                    # K-fold variants
 │
-├── docs/                     # Documentation
-│   ├── walkthrough.md        # Detailed pipeline walkthrough
-│   ├── synthetic_data_guide.md  # Synthetic data generation guide
-│   ├── label_studio_setup.md    # Label Studio annotation setup
-│   └── colab_guide.md        # Google Colab quick start
-│
-├── notebooks/                # Jupyter notebooks
-│   ├── Train_on_Colab.ipynb  # Main Colab training notebook
-│   ├── SU2_pipeline.ipynb    # Main pipeline notebook
-│   ├── SU2_Unet_Stardist_GPU.ipynb  # GPU training with U-Net + StarDist
-│   ├── kfold/                # K-fold cross-validation variants
-│   │   ├── SU2_kfold_Stardist.ipynb
-│   │   ├── SU2_Unet_kfold.ipynb
-│   │   ├── SU2_Unet_kfold_Stardist.ipynb
-│   │   └── Unet_kfold.ipynb
-│   └── legacy/               # Archived notebooks
-│
-├── modules/                  # Core Python modules
-│   ├── config.py             # Configuration and hyperparameters
-│   ├── dataset.py            # PyTorch Dataset classes
-│   ├── model.py              # U-Net++ architecture
-│   ├── loss.py               # Loss functions (IoU, Dice)
-│   ├── training.py           # Training loop
-│   ├── simulation.py         # SIM reconstruction simulation
-│   ├── tracking.py           # Cell tracking (BTrack, HOTA metrics)
-│   ├── sweep.py              # Parameter sweep utilities
-│   ├── sam_detector.py       # SAM integration
-│   └── utils.py              # Utility functions
-│
-├── scripts/                  # Utility scripts
-│   ├── train_overnight.py    # Long training runs
-│   ├── download_data.py      # Data download utilities
-│   ├── setup_sam3.py         # SAM3 setup script
+├── modules/
+│   ├── stardist_helpers.py       # StarDist training pipeline
+│   ├── model.py                  # U-Net++ architecture
+│   ├── tracking.py               # BTrack, HOTA metrics
 │   └── ...
 │
-├── configs/                  # Configuration files
-│   ├── overnight.yaml        # Overnight training config
-│   ├── 8hour.yaml            # 8-hour training config
-│   └── synthetic_data.yaml   # Synthetic data parameters
+├── annotation/
+│   └── sam_data/unet_train/      # Training data (images + masks)
 │
-├── data/                     # Data directory
-│   └── val/                  # Validation data
-│
-├── annotation/               # Annotation tools and data
-│   ├── annotate.ipynb        # Annotation notebook
-│   ├── sam_data/             # SAM annotation outputs
-│   └── label_studio/         # Label Studio configuration
-│
-├── models/                   # Trained models
-│   └── stardist/             # StarDist model checkpoints
-│
-└── sam3/                     # SAM3 submodule
+├── data/val/                     # Validation video (downloaded automatically)
+├── configs/                      # Training configurations
+└── docs/                         # Documentation
 ```
 
 ## Installation
 
 ### Local Setup
 
-1. Clone the repository:
 ```bash
-git clone <repository-url>
+git clone https://github.com/veselm73/SU2.git
 cd SU2
-```
-
-2. Create a virtual environment:
-```bash
-python -m venv venv
-source venv/bin/activate  # Linux/Mac
-# or
-venv\Scripts\activate     # Windows
-```
-
-3. Install dependencies:
-```bash
 pip install -r requirements.txt
 ```
 
-4. (Optional) Set up SAM3 for annotation:
-```bash
-python scripts/setup_sam3.py
+### Dependencies
+
+- PyTorch with CUDA
+- cellseg-models-pytorch
+- pytorch-lightning
+- albumentations
+- btrack, laptrack
+
+## Training Configuration
+
+Edit the configuration cell in `SU2_StarDist_final.ipynb`:
+
+```python
+# Basic parameters
+K_SPLITS = 5              # Cross-validation folds
+EPOCHS = 50               # Max epochs (early stopping enabled)
+BATCH_SIZE = 4            # Reduce if OOM
+LR = 1e-4                 # Learning rate
+
+# Model
+N_RAYS = 32               # StarDist rays (32, 64, or 96)
+ENCODER_NAME = "resnet18" # Backbone: resnet18/34/50, efficientnet-b0
+
+# Improvements (set to False/0 for baseline comparison)
+USE_AUGMENTATION = True   # Data augmentation
+WEIGHT_DECAY = 1e-4       # L2 regularization
 ```
 
-### Google Colab
+## Metrics
 
-See [docs/colab_guide.md](docs/colab_guide.md) for Colab-specific instructions.
+- **DetA (Detection Accuracy)**: Hungarian matching with distance threshold
+- **HOTA (Higher Order Tracking Accuracy)**: Combined detection + association metric
 
-## Quick Start
+## Results
 
-### Training on Colab (Recommended)
+The pipeline outputs:
+- `best_stardist_model.pth` - Best fold model weights
+- `stardist_predictions.csv` - Detection coordinates per frame
+- `stardist_tracked.csv` - Tracked detections with track IDs
+- `training_curves.png` - Loss curves and LR schedule
+- `training_summary.csv` - Final metrics summary
 
-1. Upload the `SU2` folder to Google Drive
-2. Open `notebooks/Train_on_Colab.ipynb` in Colab
-3. Run all cells
+## Other Notebooks
 
-### Local Training
-
-```bash
-python scripts/train_overnight.py --config configs/overnight.yaml
-```
-
-### Running the Pipeline
-
-Open `notebooks/SU2_pipeline.ipynb` in Jupyter and follow the step-by-step instructions.
-
-## Configuration
-
-Training parameters can be modified in:
-- `modules/config.py` - Python configuration
-- `configs/*.yaml` - YAML configuration files
-
-Key parameters:
-- `TRAIN_SAMPLES`: Number of synthetic training samples
-- `VAL_SAMPLES`: Number of validation samples
-- `EPOCHS`: Training epochs
-- `BATCH_SIZE`: Batch size for training
-- `PATCH_SIZE`: Image patch size (default: 128x128)
+| Notebook | Description |
+|----------|-------------|
+| `SU2_StarDist_final.ipynb` | **Recommended** - StarDist with all improvements |
+| `Train_on_Colab.ipynb` | U-Net++ training pipeline |
+| `kfold/SU2_kfold_Stardist.ipynb` | StarDist K-fold variant |
+| `kfold/SU2_Unet_kfold.ipynb` | U-Net K-fold variant |
 
 ## Documentation
 
-- [Pipeline Walkthrough](docs/walkthrough.md) - Detailed explanation of the training pipeline
-- [Synthetic Data Guide](docs/synthetic_data_guide.md) - How to configure synthetic data generation
-- [Label Studio Setup](docs/label_studio_setup.md) - Setting up annotation with Label Studio and SAM3
-- [Colab Guide](docs/colab_guide.md) - Running on Google Colab
-
-## Models
-
-The pipeline supports:
-- **U-Net++**: Nested U-Net architecture for semantic segmentation
-- **StarDist**: Star-convex polygon detection for cell nuclei
-
-## Tracking
-
-Cell tracking is implemented using:
-- **BTrack**: Bayesian cell tracking
-- **LapTrack**: Linear assignment problem-based tracking
-- **HOTA Metric**: Higher Order Tracking Accuracy for evaluation
-
-## License
-
-[Add your license here]
+- [Pipeline Walkthrough](docs/walkthrough.md)
+- [Colab Guide](docs/colab_guide.md)
+- [Label Studio Setup](docs/label_studio_setup.md)
 
 ## Acknowledgments
 
-- U-Net++ architecture
-- StarDist for cell detection
-- SAM (Segment Anything Model) for annotation assistance
-- BTrack for cell tracking
+- [StarDist](https://github.com/stardist/stardist) - Cell detection
+- [cellseg-models-pytorch](https://github.com/okunator/cellseg_models.pytorch) - PyTorch StarDist implementation
+- [BTrack](https://github.com/quantumjot/btrack) - Bayesian cell tracking
+- [SAM](https://github.com/facebookresearch/segment-anything) - Annotation assistance
