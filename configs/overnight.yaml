@@ -1,0 +1,28 @@
+# Optimized Configuration for 4-hour T4 GPU Training
+# T4 GPU specs: 16GB VRAM, ~8.1 TFLOPS FP32
+# Estimated training time: ~4 hours for 200 epochs with these settings
+
+TRAIN_SAMPLES: 2000
+VAL_SAMPLES: 400
+BATCH_SIZE: 32
+LEARNING_RATE: 1e-3
+WEIGHT_DECAY: 1e-4
+DROPOUT_RATE: 0.1
+EPOCHS: 200
+PATIENCE: 10
+SEED: 73
+
+# Data Generator Configuration
+MIN_CELLS: 8
+MAX_CELLS: 24
+RADIUS: 4.0
+PATCH_SIZE: 128
+
+# SIM Configuration
+SIM_CONFIG:
+  na: 1.49
+  wavelength: 512
+  px_size: 0.07
+  wiener_parameter: 0.1
+  apo_cutoff: 2.0
+  apo_bend: 0.9
