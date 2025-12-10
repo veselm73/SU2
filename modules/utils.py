@@ -5,6 +5,7 @@ import matplotlib.pyplot as plt
 import zipfile
 import os
 import sys
+import tifffile
 
 def set_seed(seed=42):
     """Sets the seed for reproducibility."""
@@ -114,3 +115,16 @@ def patch_dataloader():
     TargetDataLoader.__init__ = patched_dataloader_init
 
     print("Fixed: torch.utils.data.DataLoader has been successfully patched.")
+
+
+def open_tiff_file(path):
+    """
+    Open a TIFF file and return as numpy array.
+
+    Args:
+        path: Path to the TIFF file
+
+    Returns:
+        numpy array with image data
+    """
+    return tifffile.imread(path)
