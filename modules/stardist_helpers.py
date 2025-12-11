@@ -1042,7 +1042,20 @@ def run_btrack_tracking(detections_df: pd.DataFrame, config_path=None, max_searc
             tracker.volume = ((0, 1024), (0, 1024), (0, 1))
             tracker.track_interactive(step_size=100)
             tracker.optimize()
-            return tracker.to_pandas()
+            result_df = tracker.to_pandas()
+            # Standardize column names: BTrack uses 'ID' and 't', we need 'track_id' and 'frame'
+            rename_map = {}
+            if 'ID' in result_df.columns and 'track_id' not in result_df.columns:
+                rename_map['ID'] = 'track_id'
+            if 't' in result_df.columns and 'frame' not in result_df.columns:
+                rename_map['t'] = 'frame'
+            if rename_map:
+                result_df = result_df.rename(columns=rename_map)
+            # Ensure required columns exist
+            required_cols = ['frame', 'x', 'y', 'track_id']
+            if all(col in result_df.columns for col in required_cols):
+                return result_df[required_cols]
+            return result_df
     except Exception as e:
         print(f"BTrack error: {str(e)[:100]}...")
         return pd.DataFrame()
