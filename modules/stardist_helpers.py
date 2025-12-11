@@ -1480,9 +1480,12 @@ if HAS_LIGHTNING and HAS_STARDIST_TORCH:
     class StarDistCombinedLoss(nn.Module):
         """
         Combined loss for StarDist training:
-        - Focal Loss for binary mask (handles class imbalance)
+        - Focal Loss OR simple BCE for binary mask
         - Dice Loss for binary mask (overlap-based)
-        - Smooth L1 (Huber) for distance regression (robust to outliers)
+        - Smooth L1 (Huber) OR simple L1 for distance regression
+
+        For BASELINE mode (matching GPU notebook): use_simple_bce=True, use_simple_l1=True
+        For IMPROVED mode: use_simple_bce=False, use_simple_l1=False
         """
         def __init__(
             self,
@@ -1491,7 +1494,9 @@ if HAS_LIGHTNING and HAS_STARDIST_TORCH:
             dist_weight: float = 1.0,
             focal_alpha: float = 0.75,
             focal_gamma: float = 2.0,
-            smooth_l1_beta: float = 1.0
+            smooth_l1_beta: float = 1.0,
+            use_simple_bce: bool = False,
+            use_simple_l1: bool = False
         ):
             super().__init__()
             self.focal_weight = focal_weight
@@ -1500,6 +1505,8 @@ if HAS_LIGHTNING and HAS_STARDIST_TORCH:
             self.focal_alpha = focal_alpha
             self.focal_gamma = focal_gamma
             self.smooth_l1_beta = smooth_l1_beta
+            self.use_simple_bce = use_simple_bce
+            self.use_simple_l1 = use_simple_l1
 
         def focal_loss(self, pred: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
             """Focal loss for handling class imbalance."""
@@ -1507,6 +1514,10 @@ if HAS_LIGHTNING and HAS_STARDIST_TORCH:
             pt = torch.exp(-bce)
             focal = self.focal_alpha * (1 - pt) ** self.focal_gamma * bce
             return focal.mean()
+
+        def simple_bce_loss(self, pred: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
+            """Simple BCE loss (matches GPU notebook baseline)."""
+            return F.binary_cross_entropy_with_logits(pred, target)
 
         def dice_loss(self, pred: torch.Tensor, target: torch.Tensor, eps: float = 1e-6) -> torch.Tensor:
             """Dice loss for overlap optimization."""
@@ -1529,6 +1540,13 @@ if HAS_LIGHTNING and HAS_STARDIST_TORCH:
             masked_loss = (loss * mask_expanded).sum() / (mask_expanded.sum() + 1e-8)
             return masked_loss
 
+        def masked_l1(self, pred: torch.Tensor, target: torch.Tensor, mask: torch.Tensor) -> torch.Tensor:
+            """Simple L1 loss inside object regions (matches GPU notebook baseline)."""
+            l1 = F.l1_loss(pred, target, reduction='none')
+            mask_expanded = mask.expand_as(l1)
+            masked_loss = (l1 * mask_expanded).sum() / (mask_expanded.sum() + 1e-8)
+            return masked_loss
+
         def forward(
             self,
             pred_bin: torch.Tensor,
@@ -1542,11 +1560,24 @@ if HAS_LIGHTNING and HAS_STARDIST_TORCH:
             Returns dict with total loss and individual components for logging.
             """
             # Binary mask losses
-            loss_focal = self.focal_loss(pred_bin, gt_bin) if self.focal_weight > 0 else torch.tensor(0.0)
-            loss_dice = self.dice_loss(pred_bin, gt_bin) if self.dice_weight > 0 else torch.tensor(0.0)
+            if self.focal_weight > 0:
+                if self.use_simple_bce:
+                    loss_focal = self.simple_bce_loss(pred_bin, gt_bin)
+                else:
+                    loss_focal = self.focal_loss(pred_bin, gt_bin)
+            else:
+                loss_focal = torch.tensor(0.0, device=pred_bin.device)
+
+            loss_dice = self.dice_loss(pred_bin, gt_bin) if self.dice_weight > 0 else torch.tensor(0.0, device=pred_bin.device)
 
             # Distance regression loss (masked)
-            loss_dist = self.masked_smooth_l1(pred_dist, gt_dist, gt_bin) if self.dist_weight > 0 else torch.tensor(0.0)
+            if self.dist_weight > 0:
+                if self.use_simple_l1:
+                    loss_dist = self.masked_l1(pred_dist, gt_dist, gt_bin)
+                else:
+                    loss_dist = self.masked_smooth_l1(pred_dist, gt_dist, gt_bin)
+            else:
+                loss_dist = torch.tensor(0.0, device=pred_bin.device)
 
             # Combine
             total = (
@@ -1566,7 +1597,7 @@ if HAS_LIGHTNING and HAS_STARDIST_TORCH:
     class StarDistLightning(pl.LightningModule):
         """
         PyTorch Lightning module for StarDist training with improvements:
-        - Combined loss (Focal + Dice + Smooth L1)
+        - Combined loss (Focal + Dice + Smooth L1) or simple BCE + L1 for baseline
         - Weight decay regularization
         - Learning rate scheduling (ReduceLROnPlateau)
         - Configurable encoder backbone
@@ -1581,7 +1612,9 @@ if HAS_LIGHTNING and HAS_STARDIST_TORCH:
             dice_weight: float = 1.0,
             dist_weight: float = 1.0,
             scheduler_patience: int = 5,
-            scheduler_factor: float = 0.5
+            scheduler_factor: float = 0.5,
+            use_simple_bce: bool = False,
+            use_simple_l1: bool = False
         ):
             super().__init__()
             self.save_hyperparameters()
@@ -1600,11 +1633,13 @@ if HAS_LIGHTNING and HAS_STARDIST_TORCH:
             )
             self.model = wrapper.model
 
-            # Combined loss
+            # Combined loss (simple BCE/L1 for baseline, Focal/SmoothL1 for improved)
             self.criterion = StarDistCombinedLoss(
                 focal_weight=focal_weight,
                 dice_weight=dice_weight,
-                dist_weight=dist_weight
+                dist_weight=dist_weight,
+                use_simple_bce=use_simple_bce,
+                use_simple_l1=use_simple_l1
             )
 
         def forward(self, x):
@@ -1947,7 +1982,10 @@ def train_stardist_kfold(
     encoder_name: str = "resnet18",
     run_threshold_sweep: bool = True,
     sweep_prob_thresholds: List[float] = None,
-    sweep_nms_thresholds: List[float] = None
+    sweep_nms_thresholds: List[float] = None,
+    # Baseline mode flags (use simple BCE + L1 like GPU notebook)
+    use_simple_bce: bool = False,
+    use_simple_l1: bool = False
 ):
     """
     Train StarDist model using K-Fold cross-validation with improvements.
@@ -2078,7 +2116,9 @@ def train_stardist_kfold(
             dice_weight=dice_weight,
             dist_weight=dist_weight,
             scheduler_patience=scheduler_patience,
-            scheduler_factor=scheduler_factor
+            scheduler_factor=scheduler_factor,
+            use_simple_bce=use_simple_bce,
+            use_simple_l1=use_simple_l1
         )
         history_cb = LossHistoryCallback()
 
