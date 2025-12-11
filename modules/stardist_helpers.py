@@ -1006,6 +1006,138 @@ def run_laptrack(detections_df: pd.DataFrame, max_dist=15, closing_gap=2, min_le
         return pd.DataFrame()
 
 
+def run_laptrack_sweep(
+    detections_df: pd.DataFrame,
+    gt_df: pd.DataFrame,
+    track_cutoffs: List[int] = None,
+    gap_cutoffs: List[int] = None,
+    gap_frames: List[int] = None,
+    match_thresh: float = 5.0,
+    min_length: int = 2
+) -> Dict:
+    """
+    Run LapTrack parameter sweep to find best AssA score.
+
+    Args:
+        detections_df: Detection dataframe with frame, x, y columns
+        gt_df: Ground truth dataframe with frame, x, y, track_id columns
+        track_cutoffs: List of squared distances for track_cost_cutoff (default: around 49)
+        gap_cutoffs: List of squared distances for gap_closing_cost_cutoff (default: around 25)
+        gap_frames: List of max frame gaps (default: [1, 2, 3])
+        match_thresh: Distance threshold for HOTA calculation
+        min_length: Minimum track length to keep
+
+    Returns:
+        Dict with best_params, best_scores, best_tracked_df, and all_results
+    """
+    if not HAS_LAPTRACK or detections_df.empty:
+        return {'best_params': None, 'best_scores': None, 'best_tracked_df': pd.DataFrame(), 'all_results': []}
+
+    # Default sweep ranges centered around known good values
+    # Best: track_cost_cutoff=49 (7px), gap_closing_cost_cutoff=25 (5px), gap_frames=2
+    if track_cutoffs is None:
+        track_cutoffs = [36, 49, 64, 81]  # 6, 7, 8, 9 pixels
+    if gap_cutoffs is None:
+        gap_cutoffs = [16, 25, 36, 49]  # 4, 5, 6, 7 pixels
+    if gap_frames is None:
+        gap_frames = [1, 2, 3]
+
+    all_results = []
+    best_assa = -1
+    best_result = None
+
+    total_combos = len(track_cutoffs) * len(gap_cutoffs) * len(gap_frames)
+    print(f"Running LapTrack sweep: {total_combos} combinations...")
+
+    for track_cut in track_cutoffs:
+        for gap_cut in gap_cutoffs:
+            for gap_frame in gap_frames:
+                try:
+                    lt = LapTrack(
+                        track_dist_metric="sqeuclidean",
+                        track_cost_cutoff=track_cut,
+                        gap_closing_dist_metric="sqeuclidean",
+                        gap_closing_cost_cutoff=gap_cut,
+                        gap_closing_max_frame_count=gap_frame,
+                        splitting_cost_cutoff=False,
+                        merging_cost_cutoff=False
+                    )
+
+                    track_df, _, _ = lt.predict_dataframe(
+                        detections_df,
+                        coordinate_cols=['y', 'x'],
+                        frame_col='frame',
+                        only_coordinate_cols=False
+                    )
+                    res = track_df.reset_index()
+
+                    if min_length > 1:
+                        counts = res['track_id'].value_counts()
+                        valid_ids = counts[counts >= min_length].index
+                        res = res[res['track_id'].isin(valid_ids)]
+
+                    tracked = res[['frame', 'x', 'y', 'track_id']]
+
+                    # Calculate HOTA metrics
+                    scores = hota(gt_df, tracked, threshold=match_thresh)
+
+                    result = {
+                        'track_cost_cutoff': track_cut,
+                        'gap_closing_cost_cutoff': gap_cut,
+                        'gap_closing_max_frame_count': gap_frame,
+                        'track_dist_px': np.sqrt(track_cut),
+                        'gap_dist_px': np.sqrt(gap_cut),
+                        'HOTA': scores['HOTA'],
+                        'DetA': scores['DetA'],
+                        'AssA': scores['AssA'],
+                        'num_tracks': tracked['track_id'].nunique(),
+                        'num_detections': len(tracked)
+                    }
+                    all_results.append(result)
+
+                    if scores['AssA'] > best_assa:
+                        best_assa = scores['AssA']
+                        best_result = {
+                            'params': {
+                                'track_cost_cutoff': track_cut,
+                                'gap_closing_cost_cutoff': gap_cut,
+                                'gap_closing_max_frame_count': gap_frame
+                            },
+                            'scores': scores,
+                            'tracked_df': tracked.copy()
+                        }
+
+                except Exception as e:
+                    continue
+
+    # Print results summary
+    if all_results:
+        results_df = pd.DataFrame(all_results).sort_values('AssA', ascending=False)
+        print(f"\nTop 5 configurations by AssA:")
+        print(results_df.head()[['track_dist_px', 'gap_dist_px', 'gap_closing_max_frame_count', 'HOTA', 'DetA', 'AssA']].to_string(index=False))
+
+    if best_result:
+        print(f"\n{'='*60}")
+        print("BEST LAPTRACK RESULT")
+        print(f"{'='*60}")
+        print(f"HOTA: {best_result['scores']['HOTA']:.4f}")
+        print(f"DetA: {best_result['scores']['DetA']:.4f}")
+        print(f"AssA: {best_result['scores']['AssA']:.4f}")
+        print(f"\nBest parameters:")
+        print(f"  track_cost_cutoff: {best_result['params']['track_cost_cutoff']} (√={np.sqrt(best_result['params']['track_cost_cutoff']):.1f}px)")
+        print(f"  gap_closing_cost_cutoff: {best_result['params']['gap_closing_cost_cutoff']} (√={np.sqrt(best_result['params']['gap_closing_cost_cutoff']):.1f}px)")
+        print(f"  gap_closing_max_frame_count: {best_result['params']['gap_closing_max_frame_count']}")
+
+        return {
+            'best_params': best_result['params'],
+            'best_scores': best_result['scores'],
+            'best_tracked_df': best_result['tracked_df'],
+            'all_results': all_results
+        }
+
+    return {'best_params': None, 'best_scores': None, 'best_tracked_df': pd.DataFrame(), 'all_results': all_results}
+
+
 def run_btrack_tracking(detections_df: pd.DataFrame, config_path=None, max_search_radius=12.0) -> pd.DataFrame:
     """Run BTrack tracking on detections."""
     if not HAS_BTRACK or detections_df.empty:
