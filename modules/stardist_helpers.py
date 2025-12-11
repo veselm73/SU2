@@ -1601,6 +1601,7 @@ if HAS_LIGHTNING and HAS_STARDIST_TORCH:
         - Weight decay regularization
         - Learning rate scheduling (ReduceLROnPlateau)
         - Configurable encoder backbone
+        - Optional dropout for regularization
         """
         def __init__(
             self,
@@ -1614,7 +1615,8 @@ if HAS_LIGHTNING and HAS_STARDIST_TORCH:
             scheduler_patience: int = 5,
             scheduler_factor: float = 0.5,
             use_simple_bce: bool = False,
-            use_simple_l1: bool = False
+            use_simple_l1: bool = False,
+            dropout: float = 0.0
         ):
             super().__init__()
             self.save_hyperparameters()
@@ -1623,6 +1625,7 @@ if HAS_LIGHTNING and HAS_STARDIST_TORCH:
             self.weight_decay = weight_decay
             self.scheduler_patience = scheduler_patience
             self.scheduler_factor = scheduler_factor
+            self.dropout_rate = dropout
 
             # Build StarDist model
             wrapper = StarDist(
@@ -1632,6 +1635,9 @@ if HAS_LIGHTNING and HAS_STARDIST_TORCH:
                 model_kwargs={"encoder_kws": {"in_chans": 1}}
             )
             self.model = wrapper.model
+
+            # Spatial dropout for regularization (applied to decoder features)
+            self.dropout = nn.Dropout2d(p=dropout) if dropout > 0 else None
 
             # Combined loss (simple BCE/L1 for baseline, Focal/SmoothL1 for improved)
             self.criterion = StarDistCombinedLoss(
@@ -1645,7 +1651,7 @@ if HAS_LIGHTNING and HAS_STARDIST_TORCH:
         def forward(self, x):
             return self.model(x)
 
-        def _compute_loss(self, batch):
+        def _compute_loss(self, batch, apply_dropout: bool = False):
             """Compute loss for a batch."""
             images = batch["image"]
             gt_dist = batch["stardist_map"]
@@ -1656,11 +1662,16 @@ if HAS_LIGHTNING and HAS_STARDIST_TORCH:
             pred_dist = nuc_out.aux_map
             pred_bin = nuc_out.binary_map
 
+            # Apply spatial dropout during training for regularization
+            if apply_dropout and self.dropout is not None:
+                pred_dist = self.dropout(pred_dist)
+                pred_bin = self.dropout(pred_bin)
+
             losses = self.criterion(pred_bin, gt_bin, pred_dist, gt_dist)
             return losses
 
         def training_step(self, batch, batch_idx):
-            losses = self._compute_loss(batch)
+            losses = self._compute_loss(batch, apply_dropout=True)
 
             # Log individual losses
             self.log("train_loss", losses['total'], on_step=False, on_epoch=True, prog_bar=True)
@@ -1985,7 +1996,9 @@ def train_stardist_kfold(
     sweep_nms_thresholds: List[float] = None,
     # Baseline mode flags (use simple BCE + L1 like GPU notebook)
     use_simple_bce: bool = False,
-    use_simple_l1: bool = False
+    use_simple_l1: bool = False,
+    # Dropout for regularization
+    dropout: float = 0.0
 ):
     """
     Train StarDist model using K-Fold cross-validation with improvements.
@@ -2118,7 +2131,8 @@ def train_stardist_kfold(
             scheduler_patience=scheduler_patience,
             scheduler_factor=scheduler_factor,
             use_simple_bce=use_simple_bce,
-            use_simple_l1=use_simple_l1
+            use_simple_l1=use_simple_l1,
+            dropout=dropout
         )
         history_cb = LossHistoryCallback()
 
