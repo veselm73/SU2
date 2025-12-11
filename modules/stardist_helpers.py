@@ -38,7 +38,7 @@ import torch.nn.functional as F
 from torch.optim import AdamW
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 from torch.utils.data import ConcatDataset, DataLoader, Dataset, Subset
-from sklearn.model_selection import KFold
+from sklearn.model_selection import KFold, StratifiedKFold
 from skimage.measure import label, regionprops
 from skimage.draw import disk
 from skimage.feature import peak_local_max
@@ -1998,7 +1998,9 @@ def train_stardist_kfold(
     use_simple_bce: bool = False,
     use_simple_l1: bool = False,
     # Dropout for regularization
-    dropout: float = 0.0
+    dropout: float = 0.0,
+    # Stratified splitting
+    use_stratified_split: bool = False
 ):
     """
     Train StarDist model using K-Fold cross-validation with improvements.
@@ -2087,12 +2089,52 @@ def train_stardist_kfold(
 
     print(f"Video pairs: {len(video_pairs)}, Total pairs (with bonus): {len(pairs)}")
 
-    # K-Fold
-    kf = KFold(n_splits=k_splits, shuffle=True, random_state=42)
+    # K-Fold - optionally stratified by cell count
+    if use_stratified_split:
+        # Load GT to compute cells per frame for stratification
+        gt_df = pd.read_csv(val_csv_path)
+        gt_roi = gt_df[
+            (gt_df.x >= ROI_X_MIN) & (gt_df.x < ROI_X_MAX) &
+            (gt_df.y >= ROI_Y_MIN) & (gt_df.y < ROI_Y_MAX)
+        ]
+        cells_per_frame = gt_roi.groupby('frame').size()
+
+        # Get frame indices from video_map
+        video_map_df = pd.read_csv(video_map_path)
+        frame_indices = []
+        for img_path, _ in video_pairs:
+            row = video_map_df[video_map_df['filename'] == img_path.name]
+            if len(row) > 0:
+                frame_indices.append(row['real_frame_idx'].iloc[0])
+            else:
+                frame_indices.append(-1)
+
+        # Create stratification labels based on cell count bins
+        cell_counts = [cells_per_frame.get(f, 0) for f in frame_indices]
+        # Bin into k_splits groups (low to high cell count)
+        try:
+            strat_labels = pd.qcut(cell_counts, q=k_splits, labels=False, duplicates='drop')
+        except ValueError:
+            # Fall back to simple binning if qcut fails
+            strat_labels = pd.cut(cell_counts, bins=k_splits, labels=False)
+
+        kf = StratifiedKFold(n_splits=k_splits, shuffle=True, random_state=42)
+        split_iter = kf.split(video_pairs, strat_labels)
+        print(f"Using STRATIFIED K-Fold (by cell count)")
+
+        # Print stratification info
+        for i in range(k_splits):
+            count = sum(1 for l in strat_labels if l == i)
+            print(f"  Stratum {i}: {count} frames")
+    else:
+        kf = KFold(n_splits=k_splits, shuffle=True, random_state=42)
+        split_iter = kf.split(video_pairs)
+        print(f"Using standard K-Fold")
+
     fold_results = []
     all_preds = []
 
-    for fold, (train_idx, val_idx) in enumerate(kf.split(video_pairs), 1):
+    for fold, (train_idx, val_idx) in enumerate(split_iter, 1):
         print(f"\n{'='*60}")
         print(f"FOLD {fold}/{k_splits} - StarDist Training")
         print(f"{'='*60}")
