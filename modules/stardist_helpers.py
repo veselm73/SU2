@@ -1335,17 +1335,17 @@ def visualize_oof_predictions(
             ax_top = axes[0, col]
             ax_top.imshow(frame_img, cmap='gray')
 
-            # Plot GT (green circles) - distinguish matched vs unmatched
+            # Plot GT (circles) - distinguish matched vs unmatched
             for i, (_, row) in enumerate(frame_gt.iterrows()):
-                color = 'lime' if i in matched_gt else 'yellow'  # yellow = missed (FN)
+                color = 'lime' if i in matched_gt else 'cyan'  # cyan = missed (FN)
                 ax_top.scatter(
                     row['x'] - ROI_X_MIN, row['y'] - ROI_Y_MIN,
                     c=color, s=50, marker='o', facecolors='none', edgecolors=color, linewidths=2
                 )
 
-            # Plot predictions (red crosses) - distinguish matched vs unmatched
+            # Plot predictions (crosses) - distinguish matched vs unmatched
             for i, (_, row) in enumerate(frame_preds.iterrows()):
-                color = 'red' if i in matched_pred else 'magenta'  # magenta = false positive (FP)
+                color = 'red' if i in matched_pred else 'orange'  # orange = false positive (FP)
                 ax_top.scatter(
                     row['x'] - ROI_X_MIN, row['y'] - ROI_Y_MIN,
                     c=color, s=40, marker='x', linewidths=2
@@ -1363,14 +1363,14 @@ def visualize_oof_predictions(
 
             # Same annotations
             for i, (_, row) in enumerate(frame_gt.iterrows()):
-                color = 'lime' if i in matched_gt else 'yellow'
+                color = 'lime' if i in matched_gt else 'cyan'
                 ax_bot.scatter(
                     row['x'] - ROI_X_MIN, row['y'] - ROI_Y_MIN,
                     c=color, s=80, marker='o', facecolors='none', edgecolors=color, linewidths=2
                 )
 
             for i, (_, row) in enumerate(frame_preds.iterrows()):
-                color = 'red' if i in matched_pred else 'magenta'
+                color = 'red' if i in matched_pred else 'orange'
                 ax_bot.scatter(
                     row['x'] - ROI_X_MIN, row['y'] - ROI_Y_MIN,
                     c=color, s=60, marker='x', linewidths=2
@@ -1391,9 +1391,9 @@ def visualize_oof_predictions(
             Line2D([0], [0], marker='o', color='w', markerfacecolor='none',
                    markeredgecolor='lime', markersize=10, label='GT (matched)', linewidth=0),
             Line2D([0], [0], marker='o', color='w', markerfacecolor='none',
-                   markeredgecolor='yellow', markersize=10, label='GT (missed/FN)', linewidth=0),
+                   markeredgecolor='cyan', markersize=10, label='GT (missed/FN)', linewidth=0),
             Line2D([0], [0], marker='x', color='red', markersize=10, label='Pred (matched)', linewidth=0),
-            Line2D([0], [0], marker='x', color='magenta', markersize=10, label='Pred (FP)', linewidth=0),
+            Line2D([0], [0], marker='x', color='orange', markersize=10, label='Pred (FP)', linewidth=0),
         ]
         fig.legend(handles=legend_elements, loc='upper center', ncol=4, bbox_to_anchor=(0.5, 0.02))
 
