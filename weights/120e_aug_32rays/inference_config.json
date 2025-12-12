@@ -1,0 +1,14 @@
+{
+  "prob_thresh": 0.6,
+  "nms_thresh": 0.35,
+  "track_cost_cutoff": 25,
+  "gap_closing_cost_cutoff": 25,
+  "gap_closing_max_frame_count": 1,
+  "match_thresh": 5.0,
+  "roi": {
+    "x_min": 256,
+    "x_max": 512,
+    "y_min": 512,
+    "y_max": 768
+  }
+}
