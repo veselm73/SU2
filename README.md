@@ -2,15 +2,6 @@
 
 Deep learning pipeline for cell detection and tracking in microscopy images. Uses **StarDist** with a ResNet encoder for robust cell detection and **BTrack/LapTrack** for temporal tracking.
 
-## Quick Start (Google Colab)
-
-The recommended way to run this pipeline is on Google Colab with GPU:
-
-1. Open [`notebooks/SU2_StarDist_final.ipynb`](notebooks/SU2_StarDist_final.ipynb) in Colab
-2. Run all cells - data is automatically downloaded
-3. Results are saved to `models/stardist/`
-
-[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/veselm73/SU2/blob/main/notebooks/SU2_StarDist_final.ipynb)
 
 ## Features
 
