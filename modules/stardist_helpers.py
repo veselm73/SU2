@@ -1257,6 +1257,161 @@ def run_tracking_sweep(detections_df: pd.DataFrame, val_csv_path: str, match_thr
 # VISUALIZATION
 # =============================================================================
 
+def visualize_oof_predictions(
+    fold: int,
+    fold_preds_df: pd.DataFrame,
+    gt_df: pd.DataFrame,
+    val_tif_path: str,
+    save_dir: Path,
+    match_thresh: float = 5.0,
+    num_frames: int = 4
+):
+    """
+    Visualize OOF predictions vs GT annotations after each fold.
+
+    Shows red crosses for predictions and green circles for GT,
+    helping identify where the detector fails.
+
+    Args:
+        fold: Fold number
+        fold_preds_df: DataFrame with predictions (frame, x, y)
+        gt_df: DataFrame with GT annotations (frame, x, y)
+        val_tif_path: Path to validation video TIF
+        save_dir: Directory to save visualization
+        match_thresh: Distance threshold for matching
+        num_frames: Number of sample frames to visualize
+    """
+    try:
+        # Load video
+        video = tifffile.imread(val_tif_path)
+        video_roi = video[:, ROI_Y_MIN:ROI_Y_MAX, ROI_X_MIN:ROI_X_MAX]
+
+        # Get frames that have both GT and predictions
+        gt_frames = set(gt_df['frame'].unique())
+        pred_frames = set(fold_preds_df['frame'].unique()) if not fold_preds_df.empty else set()
+        common_frames = sorted(gt_frames & pred_frames)
+
+        if len(common_frames) == 0:
+            print(f"  No common frames for visualization in Fold {fold}")
+            return
+
+        # Select frames evenly distributed across the validation set
+        if len(common_frames) <= num_frames:
+            sample_frames = common_frames
+        else:
+            indices = np.linspace(0, len(common_frames) - 1, num_frames, dtype=int)
+            sample_frames = [common_frames[i] for i in indices]
+
+        # Create figure
+        fig, axes = plt.subplots(2, len(sample_frames), figsize=(4 * len(sample_frames), 8))
+        if len(sample_frames) == 1:
+            axes = axes.reshape(2, 1)
+
+        for col, frame_idx in enumerate(sample_frames):
+            frame_img = video_roi[frame_idx]
+
+            # Get GT and predictions for this frame
+            frame_gt = gt_df[gt_df['frame'] == frame_idx]
+            frame_preds = fold_preds_df[fold_preds_df['frame'] == frame_idx] if not fold_preds_df.empty else pd.DataFrame()
+
+            # Compute matches using Hungarian algorithm
+            gt_coords = frame_gt[['x', 'y']].values
+            pred_coords = frame_preds[['x', 'y']].values if not frame_preds.empty else np.array([]).reshape(0, 2)
+
+            # Match predictions to GT
+            matched_gt = set()
+            matched_pred = set()
+            if len(gt_coords) > 0 and len(pred_coords) > 0:
+                from scipy.spatial.distance import cdist
+                from scipy.optimize import linear_sum_assignment
+                dists = cdist(gt_coords, pred_coords)
+                row_ind, col_ind = linear_sum_assignment(dists)
+                for r, c in zip(row_ind, col_ind):
+                    if dists[r, c] <= match_thresh:
+                        matched_gt.add(r)
+                        matched_pred.add(c)
+
+            # Top row: Full view with all detections
+            ax_top = axes[0, col]
+            ax_top.imshow(frame_img, cmap='gray')
+
+            # Plot GT (green circles) - distinguish matched vs unmatched
+            for i, (_, row) in enumerate(frame_gt.iterrows()):
+                color = 'lime' if i in matched_gt else 'yellow'  # yellow = missed (FN)
+                ax_top.scatter(
+                    row['x'] - ROI_X_MIN, row['y'] - ROI_Y_MIN,
+                    c=color, s=50, marker='o', facecolors='none', edgecolors=color, linewidths=2
+                )
+
+            # Plot predictions (red crosses) - distinguish matched vs unmatched
+            for i, (_, row) in enumerate(frame_preds.iterrows()):
+                color = 'red' if i in matched_pred else 'magenta'  # magenta = false positive (FP)
+                ax_top.scatter(
+                    row['x'] - ROI_X_MIN, row['y'] - ROI_Y_MIN,
+                    c=color, s=40, marker='x', linewidths=2
+                )
+
+            n_tp = len(matched_gt)
+            n_fn = len(frame_gt) - n_tp
+            n_fp = len(frame_preds) - len(matched_pred)
+            ax_top.set_title(f'Frame {frame_idx}\nTP={n_tp}, FN={n_fn}, FP={n_fp}')
+            ax_top.axis('off')
+
+            # Bottom row: Zoomed view on region with most errors
+            ax_bot = axes[1, col]
+            ax_bot.imshow(frame_img, cmap='gray')
+
+            # Same annotations
+            for i, (_, row) in enumerate(frame_gt.iterrows()):
+                color = 'lime' if i in matched_gt else 'yellow'
+                ax_bot.scatter(
+                    row['x'] - ROI_X_MIN, row['y'] - ROI_Y_MIN,
+                    c=color, s=80, marker='o', facecolors='none', edgecolors=color, linewidths=2
+                )
+
+            for i, (_, row) in enumerate(frame_preds.iterrows()):
+                color = 'red' if i in matched_pred else 'magenta'
+                ax_bot.scatter(
+                    row['x'] - ROI_X_MIN, row['y'] - ROI_Y_MIN,
+                    c=color, s=60, marker='x', linewidths=2
+                )
+
+            # Zoom to center region
+            h, w = frame_img.shape
+            zoom_size = min(h, w) // 2
+            cx, cy = w // 2, h // 2
+            ax_bot.set_xlim(cx - zoom_size // 2, cx + zoom_size // 2)
+            ax_bot.set_ylim(cy + zoom_size // 2, cy - zoom_size // 2)
+            ax_bot.set_title('Zoomed Center')
+            ax_bot.axis('off')
+
+        # Add legend
+        from matplotlib.lines import Line2D
+        legend_elements = [
+            Line2D([0], [0], marker='o', color='w', markerfacecolor='none',
+                   markeredgecolor='lime', markersize=10, label='GT (matched)', linewidth=0),
+            Line2D([0], [0], marker='o', color='w', markerfacecolor='none',
+                   markeredgecolor='yellow', markersize=10, label='GT (missed/FN)', linewidth=0),
+            Line2D([0], [0], marker='x', color='red', markersize=10, label='Pred (matched)', linewidth=0),
+            Line2D([0], [0], marker='x', color='magenta', markersize=10, label='Pred (FP)', linewidth=0),
+        ]
+        fig.legend(handles=legend_elements, loc='upper center', ncol=4, bbox_to_anchor=(0.5, 0.02))
+
+        plt.suptitle(f'Fold {fold} OOF Predictions vs GT', fontsize=14, y=1.02)
+        plt.tight_layout()
+
+        # Save figure
+        save_path = Path(save_dir) / f'oof_visualization_fold_{fold}.png'
+        save_path.parent.mkdir(parents=True, exist_ok=True)
+        plt.savefig(save_path, dpi=150, bbox_inches='tight')
+        plt.show()
+
+        print(f"  OOF visualization saved: {save_path}")
+
+    except Exception as e:
+        print(f"  Warning: Could not generate OOF visualization for Fold {fold}: {e}")
+
+
 def plot_training_history(history: Dict[str, List[float]], title: str = "Training History"):
     """Plot training and validation loss curves."""
     plt.figure(figsize=(10, 4))
@@ -2000,7 +2155,9 @@ def train_stardist_kfold(
     # Dropout for regularization
     dropout: float = 0.0,
     # Stratified splitting
-    use_stratified_split: bool = False
+    use_stratified_split: bool = False,
+    # OOF visualization
+    visualize_oof: bool = False
 ):
     """
     Train StarDist model using K-Fold cross-validation with improvements.
@@ -2300,6 +2457,17 @@ def train_stardist_kfold(
                     deta = 0.0
 
         print(f"Fold {fold} Final DetA: {deta:.4f}")
+
+        # Visualize OOF predictions vs GT if enabled
+        if visualize_oof and len(valid_frames) > 0:
+            visualize_oof_predictions(
+                fold=fold,
+                fold_preds_df=fold_preds_df,
+                gt_df=sub_gt,
+                val_tif_path=val_csv_path.replace('.csv', '.tif').replace('val/val', 'val/val'),
+                save_dir=save_dir,
+                match_thresh=match_thresh
+            )
 
         fold_results.append({
             'fold': fold,
