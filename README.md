@@ -110,5 +110,6 @@ The pipeline outputs:
 
 - [StarDist](https://github.com/stardist/stardist) - Cell detection
 - [cellseg-models-pytorch](https://github.com/okunator/cellseg_models.pytorch) - PyTorch StarDist implementation
+- [LapTrack](https://github.com/yfukai/laptrack) - Linear assignment tracking
 - [BTrack](https://github.com/quantumjot/btrack) - Bayesian cell tracking
 - [SAM](https://github.com/facebookresearch/segment-anything) - Annotation assistance
