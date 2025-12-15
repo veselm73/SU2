@@ -12,6 +12,7 @@ __pycache__/
 *.csv
 *.zip
 val_data/
+data/
 /content/
 
 # Large files
