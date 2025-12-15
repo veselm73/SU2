@@ -1,0 +1,7 @@
+{
+  "architecture": "StarDist",
+  "encoder_name": "resnet18",
+  "n_rays": 64,
+  "input_channels": 1,
+  "dropout": 0.1
+}
