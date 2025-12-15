@@ -1,0 +1,2 @@
+best_fold,best_deta,final_deta,hota,deta_from_hota,assa,best_prob_thresh,best_nms_thresh,track_max_dist,gap_closing_frames,total_detections,total_tracks,use_augmentation,weight_decay,encoder,n_rays,dropout,repo_url
+5,0.8286189683860233,0.905979323833473,0.8675808086436195,0.9313626532083634,0.8081668906669423,0.6,0.35,5,2,13900,723,False,0.0,resnet18,64,0.1,https://github.com/veselm73/SU2
